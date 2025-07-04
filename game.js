@@ -2,62 +2,104 @@ const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
-    scene: {
-        preload: preload,
-        create: create,
-        update: update
-    },
-    physics: {
-        default: 'arcade',
-        arcade: { debug: false }
-    }
+    scene: { preload, create, update },
+    scale: { mode: Phaser.Scale.FIT }
 };
 
 const game = new Phaser.Game(config);
-let player, cursors, trees, resourcesText;
-let resources = { wood: 0 };
+let resources = { wood: 50, gold: 30, food: 100 };
+let selectedUnit = null;
+const gridSize = 64;
 
 function preload() {
-    this.load.image('player', 'assets/player.png');
+    this.load.image('tile', 'assets/tile.png');
+    this.load.image('worker', 'assets/worker.png');
     this.load.image('tree', 'assets/tree.png');
-    this.load.image('tiles', 'assets/tiles.png');
 }
 
 function create() {
-    // Фон
-    this.add.image(400, 300, 'tiles').setScale(2);
+    // Сетка 10x10
+    this.grid = this.add.group();
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 10; x++) {
+            const tile = this.add.image(x * gridSize, y * gridSize, 'tile')
+                .setAlpha(0.3)
+                .setInteractive()
+                .on('pointerdown', () => {
+                    if (selectedUnit) moveUnit(this, selectedUnit, x, y);
+                });
+            this.grid.add(tile);
+        }
+    }
 
-    // Игрок
-    player = this.physics.add.sprite(400, 300, 'player');
-    player.setCollideWorldBounds(true);
+    // Юниты и ресурсы
+    this.units = this.add.group();
+    spawnUnit(this, 3, 3, 'worker');
+    spawnResource(this, 7, 2, 'tree');
 
-    // Деревья
-    trees = this.physics.add.staticGroup();
-    trees.create(200, 200, 'tree');
-    trees.create(500, 400, 'tree');
-
-    // Текст ресурсов
-    resourcesText = this.add.text(10, 10, 'Дерево: 0', {
-        font: '16px Arial',
-        fill: '#ffffff',
-        backgroundColor: '#000000'
+    // Интерфейс
+    this.resourcesText = this.add.text(10, 10, getResourcesText(), {
+        font: '18px Arial',
+        fill: '#fff',
+        backgroundColor: '#000'
     });
-
-    // Управление
-    cursors = this.input.keyboard.createCursorKeys();
-    this.physics.add.collider(player, trees, collectTree, null, this);
 }
 
-function update() {
-    player.setVelocity(0);
-    if (cursors.left.isDown) player.setVelocityX(-100);
-    else if (cursors.right.isDown) player.setVelocityX(100);
-    if (cursors.up.isDown) player.setVelocityY(-100);
-    else if (cursors.down.isDown) player.setVelocityY(100);
+function update() { }
+
+function spawnUnit(scene, x, y, type) {
+    const unit = scene.add.sprite(x * gridSize, y * gridSize, type)
+        .setInteractive()
+        .on('pointerdown', () => {
+            selectedUnit = unit;
+            highlightTiles(scene, unit);
+        });
+    scene.units.add(unit);
+    return unit;
 }
 
-function collectTree(player, tree) {
-    tree.destroy();
+function spawnResource(scene, x, y, type) {
+    const res = scene.add.sprite(x * gridSize, y * gridSize, type)
+        .setData('type', type);
+    return res;
+}
+
+function moveUnit(scene, unit, targetX, targetY) {
+    scene.tweens.add({
+        targets: unit,
+        x: targetX * gridSize,
+        y: targetY * gridSize,
+        duration: 300,
+        onComplete: () => {
+            updateEconomy(scene);
+        }
+    });
+}
+
+function updateEconomy(scene) {
+    // Производство
     resources.wood += 1;
-    resourcesText.setText(`Дерево: ${resources.wood}`);
+    resources.food -= 1;
+
+    // Обновляем текст
+    scene.resourcesText.setText(getResourcesText());
+}
+
+function getResourcesText() {
+    return `Дерево: ${resources.wood} | Золото: ${resources.gold} | Еда: ${resources.food}`;
+}
+
+function highlightTiles(scene, unit) {
+    scene.grid.getChildren().forEach(tile => tile.setAlpha(0.3));
+    const unitX = Math.floor(unit.x / gridSize);
+    const unitY = Math.floor(unit.y / gridSize);
+    
+    // Подсвечиваем соседние клетки
+    for (let y = unitY - 1; y <= unitY + 1; y++) {
+        for (let x = unitX - 1; x <= unitX + 1; x++) {
+            if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                scene.grid.getChildren()[y * 10 + x].setAlpha(0.7);
+            }
+        }
+    }
 }
